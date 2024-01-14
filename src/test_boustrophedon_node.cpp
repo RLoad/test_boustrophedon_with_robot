@@ -24,8 +24,6 @@ geometry_msgs::Quaternion headingToQuaternion(double x, double y, double z);
 Eigen::Matrix3f quaternionToRotationMatrix(Eigen::Vector4f q);
 void PublishCommand();
 
-typedef actionlib::SimpleActionClient<boustrophedon_msgs::PlanMowingPathAction> Client; // Replace with actual action name
-
 bool got_initial_pose = false;
 geometry_msgs::PoseStamped initial_pose;
 
@@ -121,8 +119,7 @@ bool calaulteVelocityCommand(const boustrophedon_msgs::StripingPlan& striping_pl
       i_follow+=1;
     }
 
-  }
-  else
+  }else
   {
     dx = 0.0;
     dy = 0.0;
@@ -133,7 +130,8 @@ bool calaulteVelocityCommand(const boustrophedon_msgs::StripingPlan& striping_pl
     d_vel_(2)=dz;
   }
 
-
+  std::cerr<<"i_follow: "<<i_follow << std::endl;
+  std::cerr<<"vel dx: "<< dx <<","<< dy <<","<< dz <<"," << std::endl;
 
   return true;
 }
@@ -185,12 +183,13 @@ void UpdateRealPosition(const geometry_msgs::Pose::ConstPtr& msg) {
 }
 
 //----------------------- main loop ------------------------------------------------
-int main(int argc, char** argv) {
+int main(int argc, char** argv) 
+{
     ros::init(argc, argv, "test_boustrophedon_node");
     ros::NodeHandle n;
 
-    // Client client("convert_striping_plan_to_path", true);  // Name of the action server
-    Client client("plan_path", true);  // Name of the action server
+    actionlib::SimpleActionClient<boustrophedon_msgs::PlanMowingPathAction> client("plan_path",
+                                                                                 true);  // server name and spin thread
 
     ros::Publisher polygon_pub = n.advertise<geometry_msgs::PolygonStamped>("/input_polygon", 1, true);
     ros::Publisher path_pub = n.advertise<nav_msgs::Path>("/result_path", 1, true);
@@ -207,69 +206,45 @@ int main(int argc, char** argv) {
 
     ros::Rate loop_rate(10);
 
-    client.waitForServer();
+    ROS_INFO("Waiting for action server to start.");
+    // wait for the action server to start
+    client.waitForServer();  // will wait for infinite time
 
     ROS_INFO("Action server started");
 
-    boustrophedon_msgs::PlanMowingPathGoal goal;  // Replace with actual goal message type
+    boustrophedon_msgs::PlanMowingPathGoal goal;
 
-    // Populate goal here (polygon and pose)
-    // Create fake PolygonStamped and PoseStamped inputs
-    geometry_msgs::PolygonStamped polygon;
-    geometry_msgs::PoseStamped pose;
+    goal.property.header.stamp = ros::Time::now();
+    goal.property.header.frame_id = "map";
 
-    // Fill in the polygon and pose with your test data
-        // Set the frame ID and timestamp in the header
-        polygon.header.frame_id = "map"; // Change to your frame ID
-        polygon.header.stamp = ros::Time::now();
+    goal.property.polygon.points.resize(4);
+    goal.property.polygon.points[0].x = 0+0.8;
+    goal.property.polygon.points[0].y = 0+0.2;
+    goal.property.polygon.points[0].z = 0+0.6;
+    goal.property.polygon.points[1].x = 0+0.8;
+    goal.property.polygon.points[1].y = 0.5+0.2;
+    goal.property.polygon.points[1].z = 0+0.6;
+    goal.property.polygon.points[2].x = 0.5+0.8;
+    goal.property.polygon.points[2].y = 0.5+0.2;
+    goal.property.polygon.points[2].z = 0+0.6;
+    goal.property.polygon.points[3].x = 0.5+0.8;
+    goal.property.polygon.points[3].y = 0+0.2;
+    goal.property.polygon.points[3].z = 0+0.6;
 
-        // Define the points of the polygon
-        geometry_msgs::Point32 point1;
-        point1.x = 0.0;
-        point1.y = 0.0;
-        point1.z = 0.0; // Typically zero for 2D polygons
+    // goal.property.polygon.points[0].x = 0.5;
+    // goal.property.polygon.points[0].y = 0;
+    // goal.property.polygon.points[0].z = 0;
+    // goal.property.polygon.points[1].x = 0.5;
+    // goal.property.polygon.points[1].y = 0;
+    // goal.property.polygon.points[1].z = 0.5;
+    // goal.property.polygon.points[2].x = 0.5;
+    // goal.property.polygon.points[2].y = 0.5;
+    // goal.property.polygon.points[2].z = 0.5;
+    // goal.property.polygon.points[3].x = 0.5;
+    // goal.property.polygon.points[3].y = 0.5;
+    // goal.property.polygon.points[3].z = 0;
 
-        geometry_msgs::Point32 point2;
-        point2.x = 1.0;
-        point2.y = 0.0;
-        point2.z = 0.0;
-
-        geometry_msgs::Point32 point3;
-        point2.x = 1.0;
-        point2.y = 1.0;
-        point2.z = 0.0;
-
-        geometry_msgs::Point32 point4;
-        point2.x = 0.0;
-        point2.y = 1.0;
-        point2.z = 0.0;
-
-        // Add points to the polygon
-        polygon.polygon.points.push_back(point1);
-        polygon.polygon.points.push_back(point2);
-        polygon.polygon.points.push_back(point3);
-        polygon.polygon.points.push_back(point4);
-
-        // Set the frame ID and timestamp in the header
-        pose.header.frame_id = "base_frame"; // Change to your frame ID
-        pose.header.stamp = ros::Time::now();
-
-        // Set the position of the pose
-        pose.pose.position.x = 0.01;
-        pose.pose.position.y = 0.0;
-        pose.pose.position.z = 0.0;
-
-        // Set the orientation of the pose
-        pose.pose.orientation.x = 0.0;
-        pose.pose.orientation.y = 0.0;
-        pose.pose.orientation.z = 0.0;
-        pose.pose.orientation.w = 1.0; // Represents no rotation
-
-    goal.property = polygon;
-    goal.robot_position = pose;
-
-    std::cerr<<"polygon: "<<polygon;
-    std::cerr<<"pose: "<<pose;
+    goal.robot_position.pose.orientation.w = 1.0;
 
     polygon_pub.publish(goal.property);
 
@@ -277,7 +252,6 @@ int main(int argc, char** argv) {
 
     while (ros::ok())
     {
-        
         if (got_initial_pose)
         {
             ros::Time start_time = ros::Time::now();
@@ -298,7 +272,7 @@ int main(int argc, char** argv) {
             ROS_INFO_STREAM("Sending goal");
 
             // wait for the action to return
-            bool finished_before_timeout = client.waitForResult(ros::Duration(1.0));
+            bool finished_before_timeout = client.waitForResult(ros::Duration(30.0));
 
             if (!finished_before_timeout)
             {
@@ -323,7 +297,7 @@ int main(int argc, char** argv) {
             ROS_INFO_STREAM("Time elapsed: " << elapsed_time.toSec() << " seconds");
 
 
-            // calaulteVelocityCommand(result->plan, real_pose_,desired_vel_filtered_);
+            calaulteVelocityCommand(result->plan, real_pose_,desired_vel_filtered_);
 
 
 
@@ -331,22 +305,22 @@ int main(int argc, char** argv) {
 
       
 
-        // // msg_desired_vel_.linear.x  = desired_vel_(0);
-        // // msg_desired_vel_.linear.y  = desired_vel_(1);
-        // // msg_desired_vel_.linear.z  = desired_vel_(2);
-        // // msg_desired_vel_.angular.x = 0;
-        // // msg_desired_vel_.angular.y = 0;
-        // // msg_desired_vel_.angular.z = 0.001;
-        // msg_desired_vel_filtered_.position.x  = desired_vel_filtered_(0);
-        // msg_desired_vel_filtered_.position.y  = desired_vel_filtered_(1);
-        // msg_desired_vel_filtered_.position.z  = desired_vel_filtered_(2);
-        // msg_desired_vel_filtered_.orientation.x = 0;  
-        // msg_desired_vel_filtered_.orientation.y = 0;
-        // msg_desired_vel_filtered_.orientation.z = 0;
-        // msg_desired_vel_filtered_.orientation.w = 0;
+        // msg_desired_vel_.linear.x  = desired_vel_(0);
+        // msg_desired_vel_.linear.y  = desired_vel_(1);
+        // msg_desired_vel_.linear.z  = desired_vel_(2);
+        // msg_desired_vel_.angular.x = 0;
+        // msg_desired_vel_.angular.y = 0;
+        // msg_desired_vel_.angular.z = 0.001;
+        msg_desired_vel_filtered_.position.x  = desired_vel_filtered_(0);
+        msg_desired_vel_filtered_.position.y  = desired_vel_filtered_(1);
+        msg_desired_vel_filtered_.position.z  = desired_vel_filtered_(2);
+        msg_desired_vel_filtered_.orientation.x = 0;  
+        msg_desired_vel_filtered_.orientation.y = 0;
+        msg_desired_vel_filtered_.orientation.z = 0;
+        msg_desired_vel_filtered_.orientation.w = 0;
 
 
-        // pub_desired_vel_filtered_.publish(msg_desired_vel_filtered_);
+        pub_desired_vel_filtered_.publish(msg_desired_vel_filtered_);
         
 
         ros::spinOnce();
