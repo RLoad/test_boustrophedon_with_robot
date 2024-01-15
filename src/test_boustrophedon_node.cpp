@@ -22,7 +22,6 @@
 //------------- define all parameter----------------------------------------------------------------------
 geometry_msgs::Quaternion headingToQuaternion(double x, double y, double z);
 Eigen::Matrix3f quaternionToRotationMatrix(Eigen::Vector4f q);
-void PublishCommand();
 
 bool got_initial_pose = false;
 geometry_msgs::PoseStamped initial_pose;
@@ -34,7 +33,7 @@ Eigen::Vector4f real_pose_ori_;
 
 Eigen::Matrix3f _wRb;				// Current rotation matrix [m] (3x1)
 Eigen::Vector3f _x;				// Current position [m] (3x1)
-Eigen::Vector4f _q;				// Current end effector quaternion (4x1)
+Eigen::Vector4f _q;				// Current end effector quaternion (4x1)  
 double _toolOffsetFromEE= 0.23f;//---- knife tool with f/t sensor
 bool _firstRealPoseReceived;
 
@@ -100,30 +99,49 @@ bool convertStripingPlanToPath(const boustrophedon_msgs::StripingPlan& striping_
   return true;
 }
 
-bool calaulteVelocityCommand(const boustrophedon_msgs::StripingPlan& striping_plan, Eigen::Vector3f real_pose_, Eigen::Vector3f d_vel_)
+Eigen::Vector3f calaulteVelocityCommand(const boustrophedon_msgs::StripingPlan& striping_plan, Eigen::Vector3f real_pose_)
 {
   double dx,dy,dz;
+  double scale_vel=1.2;
+  Eigen::Vector3f d_vel_;
+  Eigen::Vector3f path_point;
+
+  
+
+  
 
   if (i_follow < striping_plan.points.size() - 1)
   {
-    dx = striping_plan.points[i_follow + 1].point.x - real_pose_(0);
-    dy = striping_plan.points[i_follow + 1].point.y - real_pose_(1);
-    dz = striping_plan.points[i_follow + 1].point.z - real_pose_(2);
+    path_point(0)=striping_plan.points[i_follow + 1].point.x;
+    path_point(1)=striping_plan.points[i_follow + 1].point.y;
+    path_point(2)=0.9;
 
-    d_vel_(0)=dx;
-    d_vel_(1)=dy;
-    d_vel_(2)=dz;
+    // Eigen::Vector4f target_ori=1;
+    // Eigen::Matrix3f pathRotMat=ori2rotmat;
+    // path_point=pathRotMat*path_point;
 
-    if (d_vel_.norm()<=0.01)
+    dx = path_point(2) - real_pose_(0);
+    dy = path_point(1) - real_pose_(1);
+    dz = path_point(0) - real_pose_(2);
+
+    d_vel_(0)=dx*scale_vel;
+    d_vel_(1)=dy*scale_vel;
+    d_vel_(2)=dz*scale_vel;
+
+    if (d_vel_.norm()<=0.04)
     {
       i_follow+=1;
     }
 
   }else
   {
-    dx = 0.0;
-    dy = 0.0;
-    dz = 0.0;
+    path_point(0)=striping_plan.points[i_follow].point.x;
+    path_point(1)=striping_plan.points[i_follow].point.y;
+    path_point(2)=0.9;
+
+    dx = path_point(2) - real_pose_(0);
+    dy = path_point(1) - real_pose_(1);
+    dz = path_point(0) - real_pose_(2);
 
     d_vel_(0)=dx;
     d_vel_(1)=dy;
@@ -131,9 +149,15 @@ bool calaulteVelocityCommand(const boustrophedon_msgs::StripingPlan& striping_pl
   }
 
   std::cerr<<"i_follow: "<<i_follow << std::endl;
+  std::cerr<<"real_pose_: "<< real_pose_(0) <<","<< real_pose_(1) <<","<< real_pose_(2) <<"," << std::endl;
+  std::cerr<<"striping_plan: "<< striping_plan.points[i_follow + 1].point.x <<","
+                              << striping_plan.points[i_follow + 1].point.y <<","
+                              << striping_plan.points[i_follow + 1].point.z+0.5 <<"," << std::endl;
   std::cerr<<"vel dx: "<< dx <<","<< dy <<","<< dz <<"," << std::endl;
+  std::cerr<<"d_vel_: "<< d_vel_(0) <<","<< d_vel_(1) <<","<< d_vel_(2) <<"," << std::endl;
+  std::cerr<<"d_vel_.norm(): "<<d_vel_.norm() << std::endl;
 
-  return true;
+  return d_vel_;
 }
 
 
@@ -217,19 +241,22 @@ int main(int argc, char** argv)
     goal.property.header.stamp = ros::Time::now();
     goal.property.header.frame_id = "map";
 
+    double target_length=0.2;
+
     goal.property.polygon.points.resize(4);
-    goal.property.polygon.points[0].x = 0+0.8;
-    goal.property.polygon.points[0].y = 0+0.2;
-    goal.property.polygon.points[0].z = 0+0.6;
-    goal.property.polygon.points[1].x = 0+0.8;
-    goal.property.polygon.points[1].y = 0.5+0.2;
-    goal.property.polygon.points[1].z = 0+0.6;
-    goal.property.polygon.points[2].x = 0.5+0.8;
-    goal.property.polygon.points[2].y = 0.5+0.2;
-    goal.property.polygon.points[2].z = 0+0.6;
-    goal.property.polygon.points[3].x = 0.5+0.8;
-    goal.property.polygon.points[3].y = 0+0.2;
-    goal.property.polygon.points[3].z = 0+0.6;
+    goal.property.polygon.points[0].x = 0+0.5;
+    goal.property.polygon.points[0].y = 0+0.0;
+    goal.property.polygon.points[1].x = 0+0.5;
+    goal.property.polygon.points[1].y = target_length+0.0;
+    goal.property.polygon.points[2].x = target_length+0.5;
+    goal.property.polygon.points[2].y = target_length+0.0;
+    goal.property.polygon.points[3].x = target_length+0.5;
+    goal.property.polygon.points[3].y = 0+0.0;
+
+    goal.property.polygon.points[0].z = 0.1;
+    goal.property.polygon.points[1].z = 0.1;
+    goal.property.polygon.points[2].z = 0.1;
+    goal.property.polygon.points[3].z = 0.1;
 
     // goal.property.polygon.points[0].x = 0.5;
     // goal.property.polygon.points[0].y = 0;
@@ -296,10 +323,11 @@ int main(int argc, char** argv)
             ros::Duration elapsed_time = end_time - start_time;
             ROS_INFO_STREAM("Time elapsed: " << elapsed_time.toSec() << " seconds");
 
+            // ROS_INFO_STREAM("real_pose_: " << real_pose_ );
+            
+            desired_vel_filtered_=calaulteVelocityCommand(result->plan, real_pose_);
 
-            calaulteVelocityCommand(result->plan, real_pose_,desired_vel_filtered_);
-
-
+            ROS_INFO_STREAM("desired_vel_filtered_: " << desired_vel_filtered_ );
 
         }
 
